@@ -20,30 +20,30 @@ public class Task2 {
         @Override
         public void performOperation() {
             CompletionService<RecipientResult> service = new ExecutorCompletionService<>(ForkJoinPool.commonPool());
-            Executor executor = CompletableFuture.delayedExecutor(timeout().toNanos(), TimeUnit.NANOSECONDS);
-            Event event = client.readData();
-            for (Address recipient : event.recipients) {
-                service.submit(() -> new RecipientResult(recipient, client.sendData(recipient, event.payload())));
-            }
-            int acceptedCount = 0;
+            Executor delayedExecutor = CompletableFuture.delayedExecutor(timeout().toNanos(), TimeUnit.NANOSECONDS);
+            CompletableFuture.runAsync(() -> {
+                while (true) {
+                    Event event = client.readData();
+                    for (Address recipient : event.recipients) {
+                        service.submit(() -> new RecipientResult(recipient, event.payload(), client.sendData(recipient, event.payload())));
+                    }
+                }});
             try {
                 do {
                     RecipientResult take = service.take().get();
-                    if (take.result() == Result.ACCEPTED) {
-                        acceptedCount++;
-                    } else {
+                    if (take.result() == Result.REJECTED) {
                         CompletableFuture<RecipientResult> retryFuture = CompletableFuture.
-                                supplyAsync(() -> new RecipientResult(take.recipient, client.sendData(take.recipient, event.payload())), executor);
+                                supplyAsync(() -> new RecipientResult(take.recipient,  take.payload(), client.sendData(take.recipient(), take.payload())), delayedExecutor);
                         service.submit(retryFuture::get);
                     }
-                } while (acceptedCount != event.recipients.size());
+                } while (true);
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
-    public record RecipientResult(Address recipient, Result result) {}
+    public record RecipientResult(Address recipient, Payload payload, Result result) {}
 
     public record Payload(String origin, byte[] data) {}
     public record Address(String datacenter, String nodeId) {}

@@ -19,7 +19,7 @@ public class Task1 {
 
         @Override
         public Task1.ApplicationStatusResponse performOperation(String id) {
-            AtomicInteger retry = new AtomicInteger(1); // todo think about realization retry
+            AtomicInteger retry = new AtomicInteger(1); // todo Подумать о реализации перезапроса
             long startTime = System.nanoTime();
             CompletableFuture<Task1.Response> request1 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
             CompletableFuture<Task1.Response> request2 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
