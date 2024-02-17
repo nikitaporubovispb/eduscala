@@ -40,7 +40,7 @@ public class Task1 {
                 return failure;
             } else {
                 return switch (o) {
-                    case Task1.Response.Success s -> new Task1.ApplicationStatusResponse.Success(s.applicationStatus, s.applicationId);
+                    case Task1.Response.Success s -> new Task1.ApplicationStatusResponse.Success(s.applicationStatus(), s.applicationId());
                     default -> failure;
                 };
             }
