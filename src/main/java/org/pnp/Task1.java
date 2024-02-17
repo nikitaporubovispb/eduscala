@@ -10,10 +10,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Task1 {
-    public static void main(String[] args) {
-        System.out.println("EduScalaHandler");
-    }
-
     public static class EduScalaHandler implements Task1.Handler {
         private final Task1.Client client;
 
@@ -23,7 +19,7 @@ public class Task1 {
 
         @Override
         public Task1.ApplicationStatusResponse performOperation(String id) {
-            AtomicInteger retry = new AtomicInteger(1);
+            AtomicInteger retry = new AtomicInteger(1); // todo think about realization retry
             long startTime = System.nanoTime();
             CompletableFuture<Task1.Response> request1 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
             CompletableFuture<Task1.Response> request2 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
@@ -44,10 +40,7 @@ public class Task1 {
                 return failure;
             } else {
                 return switch (o) {
-                    case Task1.Response.Success s ->
-                            new Task1.ApplicationStatusResponse.Success(s.applicationStatus, s.applicationId);
-                    case Task1.Response.RetryAfter ra -> failure;
-                    case Task1.Response.Failure f -> failure;
+                    case Task1.Response.Success s -> new Task1.ApplicationStatusResponse.Success(s.applicationStatus, s.applicationId);
                     default -> failure;
                 };
             }
