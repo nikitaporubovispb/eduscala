@@ -19,8 +19,8 @@ public class Task2 {
 
         @Override
         public void performOperation() {
-            ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-            CompletionService<RecipientResult> service = new ExecutorCompletionService<>(threadPool);
+            CompletionService<RecipientResult> service = new ExecutorCompletionService<>(ForkJoinPool.commonPool());
+            Executor executor = CompletableFuture.delayedExecutor(timeout().toNanos(), TimeUnit.NANOSECONDS);
             Event event = client.readData();
             for (Address recipient : event.recipients) {
                 service.submit(() -> new RecipientResult(recipient, client.sendData(recipient, event.payload())));
@@ -32,25 +32,14 @@ public class Task2 {
                     if (take.result() == Result.ACCEPTED) {
                         acceptedCount++;
                     } else {
-                        service.submit(() -> new RecipientResult(take.recipient, client.sendData(take.recipient, event.payload())));
+                        CompletableFuture<RecipientResult> retryFuture = CompletableFuture.
+                                supplyAsync(() -> new RecipientResult(take.recipient, client.sendData(take.recipient, event.payload())), executor);
+                        service.submit(retryFuture::get);
                     }
                 } while (acceptedCount != event.recipients.size());
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
             }
-            awaitTerminationAfterShutdown(threadPool);
-        }
-    }
-
-    public static void awaitTerminationAfterShutdown(ExecutorService threadPool) {
-        threadPool.shutdown();
-        try {
-            if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
-                threadPool.shutdownNow();
-            }
-        } catch (InterruptedException ex) {
-            threadPool.shutdownNow();
-            Thread.currentThread().interrupt();
         }
     }
 
