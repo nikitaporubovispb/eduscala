@@ -3,10 +3,7 @@ package org.pnp;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Task1 {
@@ -19,33 +16,59 @@ public class Task1 {
 
         @Override
         public Task1.ApplicationStatusResponse performOperation(String id) {
-            AtomicInteger retry = new AtomicInteger(1); // todo Подумать о реализации перезапроса
+            AtomicInteger retry = new AtomicInteger(0);
+            AtomicInteger failed = new AtomicInteger(0);
             long startTime = System.nanoTime();
-            CompletableFuture<Task1.Response> request1 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
-            CompletableFuture<Task1.Response> request2 = CompletableFuture.supplyAsync(() -> client.getApplicationStatus1(id));
+            CompletionService<ClientResponse> service = new ExecutorCompletionService<>(ForkJoinPool.commonPool());
 
-            CompletableFuture<Task1.ApplicationStatusResponse> handle = CompletableFuture.anyOf(request1, request2)
-                    .orTimeout(15, TimeUnit.SECONDS)
-                    .handle((o, throwable) -> handle(o, throwable, new Task1.ApplicationStatusResponse.Failure(
-                            Duration.of(System.nanoTime() - startTime, ChronoUnit.NANOS), retry.get())));
             try {
-                return handle.get();
+                return CompletableFuture.supplyAsync(() -> {
+                    service.submit(() -> new ClientResponse(1, client.getApplicationStatus1(id)));
+                    service.submit(() -> new ClientResponse(2, client.getApplicationStatus2(id)));
+                    try {
+                        do {
+                            ClientResponse take = service.take().get();
+                            if (take.response() instanceof Response.Success s) {
+                                return new ApplicationStatusResponse.Success(s.applicationStatus(), s.applicationId());
+                            } else if (take.response() instanceof Response.RetryAfter rf) {
+                                retry.incrementAndGet();
+                                Executor delayedExecutor = CompletableFuture.delayedExecutor(rf.delay.toNanos(), TimeUnit.NANOSECONDS);
+                                service.submit(() -> CompletableFuture.supplyAsync(() -> {
+                                    if (take.methodNumber() == 1) {
+                                        return new ClientResponse(1, client.getApplicationStatus1(id));
+                                    } else {
+                                        return new ClientResponse(2, client.getApplicationStatus2(id));
+                                    }
+                                }, delayedExecutor).get());
+                            } else if (take.response() instanceof Response.Failure f) {
+                                int failedMethod = failed.addAndGet(1);
+                                if (failedMethod == 2) {
+                                    return new ApplicationStatusResponse
+                                            .Failure(Duration.ofNanos(System.nanoTime() - startTime), retry.get());
+                                }
+                            }
+                        } while (true);
+                    } catch (InterruptedException | ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                        .orTimeout(15, TimeUnit.SECONDS)
+                        .handle((o, th) -> {
+                            if (th != null) {
+                                return new ApplicationStatusResponse
+                                        .Failure(Duration.ofNanos(System.nanoTime() - startTime), retry.get());
+                            } else {
+                                return o;
+                            }
+                        }).get();
             } catch (InterruptedException | ExecutionException e) {
-                return new Task1.ApplicationStatusResponse.Failure(null, retry.get());
-            }
-        }
-
-        private static Task1.ApplicationStatusResponse handle(Object o, Throwable throwable, Task1.ApplicationStatusResponse.Failure failure) {
-            if (throwable != null) {
-                return failure;
-            } else {
-                return switch (o) {
-                    case Task1.Response.Success s -> new Task1.ApplicationStatusResponse.Success(s.applicationStatus(), s.applicationId());
-                    default -> failure;
-                };
+                return new ApplicationStatusResponse
+                        .Failure(Duration.ofNanos(System.nanoTime() - startTime), retry.get());
             }
         }
     }
+
+    public record ClientResponse(int methodNumber, Response response) {}
 
     public sealed interface Response {
         record Success(String applicationStatus, String applicationId) implements Response {}
