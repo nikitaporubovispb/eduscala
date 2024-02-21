@@ -9,29 +9,24 @@ public class Solution2 {
 
         int result = 0;
 
-        boolean isA = false;
-        boolean isB = false;
-
-        for (char c : s.toCharArray()) {
-            if (c == 'a') {
-                if (isB) {
-                    isB = false;
-                }
-                isA = true;
-            }
-            else if (c == 'b') {
-                if (isA) {
-                    isB = true;
-                }
-            }
-            else if (c == 'c') {
-                if (isA && !isB) {
-                    isA = false;
-                }
-                if (isA) {
-                    isA = false;
-                    isB = false;
-                    result++;
+        char[] chars = s.toCharArray();
+        aLoop: for (int a = 0; a < chars.length; a++) {
+            if (chars[a] == 'a') {
+                a++;
+                for (int b = a; b < chars.length; b++, a++) {
+                    if (chars[b] == 'b') {
+                        b++;
+                        for (int c = b; c < chars.length; c++, b++, a++) {
+                            if (chars[c] == 'c') {
+                                result++;
+                                continue aLoop;
+                            } else if (chars[c] == 'a') {
+                                continue aLoop;
+                            }
+                        }
+                    } else if (chars[b] == 'c') {
+                        continue aLoop;
+                    }
                 }
             }
         }
