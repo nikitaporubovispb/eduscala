@@ -6,38 +6,7 @@ import java.util.stream.Collectors;
 
 public class Solution4 {
     public static void main(String[] args) {
-        class BadStep {
-            final int start;
-            final int end;
-            final int sum;
-
-            public BadStep(int start, int end, int sum) {
-                this.start = start;
-                this.end = end;
-                this.sum = sum;
-            }
-
-            public int getStart() {
-                return start;
-            }
-
-            public int getEnd() {
-                return end;
-            }
-
-            public int getSum() {
-                return sum;
-            }
-
-            @Override
-            public String toString() {
-                return "BadStep{" +
-                        "start=" + start +
-                        ", end=" + end +
-                        ", sum=" + sum +
-                        '}';
-            }
-        }
+        record BadStep(int start, int end, int sum) {}
         List<BadStep> badSteps = new ArrayList<>();
 
         Scanner sc = new Scanner(System.in);
@@ -45,40 +14,40 @@ public class Solution4 {
         int k = sc.nextInt();
         int[] a = new int[n + 1];
 
-        boolean isBad = false;
-        int badStart = 0;
-        int badSum = 0;
-
         for (int i = 1; i <= n; i++) {
             int v = sc.nextInt();
             a[i] = v;
-
-            if (isBad) {
-                if (v < 0) {
-                    badSum += v;
-                } else {
-                    if ((i - badStart) != 1) {
-                        badSteps.add(new BadStep(badStart, i-1, badSum));
+            if (v < 0) {
+                int badStart = i;
+                int badSum = v;
+                i++;
+                // метод двух указателей
+                // подсчитываем промежутки с плохими шагами
+                for (int badStepIter = i; badStepIter <= n; badStepIter++, i++) {
+                    v = sc.nextInt();
+                    a[i] = v;
+                    if (v < 0) {
+                        if (badStepIter == n) {  // мальчик должен остановится на последнем шаге, даже если проходит не думая
+                            if ((badStepIter - badStart) != 1) {    // один плохой шаг мальчик может сам перепрыгнуть
+                                badSteps.add(new BadStep(badStart, i-1, badSum));
+                            }
+                        } else {
+                            badSum += v;
+                        }
+                    } else {
+                        if ((badStepIter - badStart) != 1) {    // один плохой шаг мальчик может сам перепрыгнуть
+                            badSteps.add(new BadStep(badStart, i-1, badSum));
+                        }
+                        break;
                     }
-                    badSum = 0;
-                    isBad = false;
-                }
-            } else {
-                if (v < 0) {
-                    isBad = true;
-                    badStart = i;
-                    badSum = v;
                 }
             }
         }
 
-        if (isBad && (a.length - badStart) != 1) {
-            badSteps.add(new BadStep(badStart, a.length-1, badSum - a[a.length -1]));
-        }
         Map<Integer, BadStep> startToBadStep = badSteps.stream()
-                .sorted(Comparator.comparing(BadStep::getSum))
+                .sorted(Comparator.comparing(BadStep::sum))
                 .limit(k)
-                .collect(Collectors.toMap(BadStep::getStart, Function.identity()));
+                .collect(Collectors.toMap(BadStep::start, Function.identity()));
 
         int[] dp = new int[n + 1];
 
@@ -87,9 +56,6 @@ public class Solution4 {
             if (badStep != null) {
                 for (int j = i; j < badStep.end; j++, i++) {
                     dp[i] = dp[i - 1];
-                    if (j == n-1 && badStep.end == n) {
-                        dp[n] += dp[i - 1] + a[n];
-                    }
                 }
             } else {
                 if (i == 1) {
