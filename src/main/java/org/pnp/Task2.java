@@ -3,10 +3,13 @@ package org.pnp;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Task2 {
     public static class EduScalaHandler implements Handler {
         private final Client client;
+        private final BlockingQueue<Event> eventsQueue = new LinkedBlockingQueue<>();
+        private final Executor executor = ForkJoinPool.commonPool();
 
         public EduScalaHandler(Client client) {
             this.client = client;
@@ -19,31 +22,36 @@ public class Task2 {
 
         @Override
         public void performOperation() {
-            CompletionService<RecipientResult> service = new ExecutorCompletionService<>(ForkJoinPool.commonPool());
-            Executor delayedExecutor = CompletableFuture.delayedExecutor(timeout().toNanos(), TimeUnit.NANOSECONDS);
-            CompletableFuture.runAsync(() -> {
-                while (true) {
-                    Event event = client.readData();
-                    for (Address recipient : event.recipients) {
-                        service.submit(() -> new RecipientResult(recipient, event.payload(), client.sendData(recipient, event.payload())));
+            AtomicBoolean canceled = new AtomicBoolean(false);
+            executor.execute(() -> {
+                while (!canceled.get()) {
+                    try {
+                        Event event = eventsQueue.take();
+                        for (Address recipient : event.recipients) {
+                            executor.execute(() -> {
+                                Result sendResult = client.sendData(recipient, event.payload());
+                                if (sendResult == Result.REJECTED) {
+                                    try {
+                                        Thread.sleep(timeout().toMillis());
+                                        eventsQueue.put(new Event(List.of(recipient), event.payload()));
+                                    } catch (InterruptedException e) {
+                                        canceled.set(true);
+                                    }
+                                }
+                            });
+                        }
+                    } catch (InterruptedException e) {
+                        canceled.set(true);
                     }
-                }});
-            try {
-                do {
-                    RecipientResult take = service.take().get();
-                    if (take.result() == Result.REJECTED) {
-                        CompletableFuture<RecipientResult> retryFuture = CompletableFuture.
-                                supplyAsync(() -> new RecipientResult(take.recipient,  take.payload(), client.sendData(take.recipient(), take.payload())), delayedExecutor);
-                        service.submit(retryFuture::get);
-                    }
-                } while (true);
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
-            }
+                }
+            });
+            executor.execute(() -> {
+                while (!canceled.get()) {
+                    eventsQueue.add(client.readData());
+                }
+            });
         }
     }
-
-    public record RecipientResult(Address recipient, Payload payload, Result result) {}
 
     public record Payload(String origin, byte[] data) {}
     public record Address(String datacenter, String nodeId) {}
