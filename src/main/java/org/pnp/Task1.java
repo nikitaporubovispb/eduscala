@@ -5,17 +5,18 @@ import org.jetbrains.annotations.Nullable;
 import java.time.Duration;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 public class Task1 {
-    public static class EduScalaHandler implements Task1.Handler {
-        private final Task1.Client client;
+    public static class EduScalaHandler implements Handler {
+        private final Client client;
 
-        public EduScalaHandler(Task1.Client client) {
+        public EduScalaHandler(Client client) {
             this.client = client;
         }
 
         @Override
-        public Task1.ApplicationStatusResponse performOperation(String id) {
+        public ApplicationStatusResponse performOperation(String id) {
             AtomicInteger retry = new AtomicInteger(0);
             AtomicInteger failed = new AtomicInteger(0);
             long startTime = System.nanoTime();
@@ -23,8 +24,8 @@ public class Task1 {
 
             try {
                 return CompletableFuture.supplyAsync(() -> {
-                    service.submit(() -> new ClientResponse(1, client.getApplicationStatus1(id)));
-                    service.submit(() -> new ClientResponse(2, client.getApplicationStatus2(id)));
+                    service.submit(() -> new ClientResponse(client::getApplicationStatus1, client.getApplicationStatus1(id)));
+                    service.submit(() -> new ClientResponse(client::getApplicationStatus2, client.getApplicationStatus2(id)));
                     try {
                         do {
                             ClientResponse take = service.take().get();
@@ -32,14 +33,10 @@ public class Task1 {
                                 return new ApplicationStatusResponse.Success(s.applicationStatus(), s.applicationId());
                             } else if (take.response() instanceof Response.RetryAfter rf) {
                                 retry.incrementAndGet();
-                                Executor delayedExecutor = CompletableFuture.delayedExecutor(rf.delay.toNanos(), TimeUnit.NANOSECONDS);
-                                service.submit(() -> CompletableFuture.supplyAsync(() -> {
-                                    if (take.methodNumber() == 1) {
-                                        return new ClientResponse(1, client.getApplicationStatus1(id));
-                                    } else {
-                                        return new ClientResponse(2, client.getApplicationStatus2(id));
-                                    }
-                                }, delayedExecutor).get());
+                                service.submit(() -> {
+                                    Thread.sleep(rf.delay.toMillis());
+                                    return new ClientResponse(take.method, take.method.apply(id));
+                                });
                             } else if (take.response() instanceof Response.Failure f) {
                                 int failedMethod = failed.addAndGet(1);
                                 if (failedMethod == 2) {
@@ -68,7 +65,7 @@ public class Task1 {
         }
     }
 
-    public record ClientResponse(int methodNumber, Response response) {}
+    public record ClientResponse(Function<String, Response> method, Response response) {}
 
     public sealed interface Response {
         record Success(String applicationStatus, String applicationId) implements Response {}
