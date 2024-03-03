@@ -52,6 +52,29 @@ public class TestSolution5 {
                         new Solution5.Interval(3, 3, 1))));
     }
 
+    @Test
+    public void testIsDoneTwoIntervalMultiWhole() {
+        Assert.assertTrue(Solution5.isDone(3,
+                List.of(new Solution5.Interval(1, 2, 2),
+                        new Solution5.Interval(1, 3, 3))));
+    }
+
+    @Test
+    public void testIsDoneTwoIntervalMulti() {
+        Assert.assertTrue(Solution5.isDone(4,
+                List.of(new Solution5.Interval(1, 2, 2),
+                        new Solution5.Interval(1, 3, 3),
+                        new Solution5.Interval(4, 4, 1))));
+    }
+
+    @Test
+    public void testIsDoneTwoIntervalMulti2Middle() {
+        Assert.assertTrue(Solution5.isDone(4,
+                List.of(new Solution5.Interval(1, 2, 2),
+                        new Solution5.Interval(1, 2, 2),
+                        new Solution5.Interval(3, 4, 2))));
+    }
+
     // Solution5.makeMapOfSubs
     @Test
     public void testMakeMapOfSubsNoIntervals() {

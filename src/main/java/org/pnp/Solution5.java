@@ -44,15 +44,26 @@ public class Solution5 {
     }
 
     public static boolean isDone(int size, List<Interval> intervals) {
-        Map<Integer, Integer> intervalMap = intervals.stream().collect(Collectors.toMap(Interval::start, Interval::end));
-        Integer endOfCur = intervalMap.get(1);
-        while (endOfCur != null) {
-            if (Objects.equals(endOfCur, size)) {
-                return true;
+        Map<Integer, List<Integer>> intervalMap = intervals.stream()
+                .collect(Collectors.groupingBy(Interval::start, Collectors.mapping(Interval::end, Collectors.toList())));
+        Queue<Node> frontier = new ArrayDeque<>();
+        int nextStart = 1;
+        Node cur = new Node(nextStart, intervalMap.get(nextStart));
+        while (cur != null) {
+            if (cur.children != null) {
+                for (Integer child : cur.children) {
+                    if (child == size) {
+                        return true;
+                    }
+                    nextStart = child + 1;
+                    frontier.add(new Node(nextStart, intervalMap.get(nextStart)));
+                }
             }
-            endOfCur = intervalMap.get(endOfCur + 1);
+            cur = frontier.poll();
         }
         return false;
     }
+
+    public record Node(Integer parent, List<Integer> children){}
     public record Interval(int start, int end, int size){}
 }
